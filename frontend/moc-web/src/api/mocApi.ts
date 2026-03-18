@@ -278,6 +278,29 @@ export const mocApi = {
   resetApprovers: (id: string) =>
     axiosClient.post<MocRequestDetail>(`/mocrequests/${id}/approvers/reset`),
 
+  /** Adds a document link to a MOC. */
+  addDocumentLink: (mocId: string, data: { documentGroup?: string; documentType?: string; name?: string; url?: string }) =>
+    axiosClient.post<MocRequestDetail>(`/mocrequests/${mocId}/documents`, data),
+
+  /** Uploads a file as an attachment to a MOC. */
+  uploadDocument: (mocId: string, file: File, documentGroup?: string, documentType?: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (documentGroup) formData.append('documentGroup', documentGroup);
+    if (documentType) formData.append('documentType', documentType);
+    return axiosClient.post<MocRequestDetail>(`/mocrequests/${mocId}/documents/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  /** Deletes a document from a MOC. */
+  deleteDocument: (mocId: string, docId: string) =>
+    axiosClient.delete<MocRequestDetail>(`/mocrequests/${mocId}/documents/${docId}`),
+
+  /** Returns the URL to download an attached file (or open link). */
+  getDocumentFileUrl: (mocId: string, docId: string) =>
+    `${axiosClient.defaults.baseURL}/mocrequests/${mocId}/documents/${docId}/file`,
+
   markInactive: (id: string) => 
     axiosClient.post<MocRequestDetail>(`/mocrequests/${id}/mark-inactive`),
   

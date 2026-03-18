@@ -688,7 +688,7 @@ export default function CreateRequest() {
           </Grid>
           <Grid size={{ xs: 12 }}>
             <Typography variant="body2" color="text.secondary">
-              Upload RA documents and meeting minutes here (file upload coming soon)
+              After submitting, you can add attachments (links or file uploads) on the MOC detail page.
             </Typography>
           </Grid>
         </Grid>
@@ -702,7 +702,7 @@ export default function CreateRequest() {
               Pre-Implementation Documents
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Document upload functionality will be added here
+              Add links or upload files from the MOC detail page after the request is created.
             </Typography>
           </Grid>
           <Grid size={{ xs: 12 }}>
@@ -711,7 +711,7 @@ export default function CreateRequest() {
               Post-Implementation Documents
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Document upload functionality will be added here
+              Add links or upload files from the MOC detail page after the request is created.
             </Typography>
           </Grid>
         </Grid>
@@ -725,7 +725,7 @@ export default function CreateRequest() {
               Approver Chain
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Approvers are assigned by role, not by specific person
+              Approvers are assigned by role, not by specific person. Approval levels and roles can be configured in Admin.
             </Typography>
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Typography variant="body2">1. Supervisor</Typography>
@@ -878,6 +878,21 @@ export default function CreateRequest() {
     </Box>
   );
 
+  /** DMOC is managed in the dedicated DMOC section; show info and link. */
+  const renderDmocInfo = () => (
+    <Box>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+        Departmental Management of Change (DMOC) requests are created and managed in the <strong>DMOC</strong> section.
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Use the link below to go to the DMOC list and create a new draft from there. When the DMOC feature is enabled, you can submit and track DMOC requests separately.
+      </Typography>
+      <Button variant="contained" onClick={() => navigate('/dmoc')}>
+        Go to DMOC
+      </Button>
+    </Box>
+  );
+
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
@@ -885,14 +900,9 @@ export default function CreateRequest() {
       </Typography>
 
       <Paper sx={{ p: 3, mt: 2 }}>
-        {selectedType === 'StandardEmoc' && renderStandardEmocForm()}
+        {(selectedType === 'StandardEmoc' || selectedType === 'Omoc') && renderStandardEmocForm()}
         {selectedType === 'BypassEmoc' && renderBypassEmocForm()}
-        {selectedType === 'Omoc' && (
-          <Typography>OMOC form (placeholder, ready to expand)</Typography>
-        )}
-        {selectedType === 'Dmoc' && (
-          <Typography>DMOC form (placeholder, ready to expand)</Typography>
-        )}
+        {selectedType === 'Dmoc' && renderDmocInfo()}
 
         {submitError && (
           <Alert severity="error" onClose={() => setSubmitError(null)} sx={{ mb: 2 }}>
@@ -905,26 +915,28 @@ export default function CreateRequest() {
         {/* Action Buttons */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
           <Button onClick={handleBack} disabled={submitLoading}>
-            {activeStep === 0 ? 'Back to Type Selection' : 'Back'}
+            {selectedType === 'Dmoc' ? 'Back to Type Selection' : activeStep === 0 ? 'Back to Type Selection' : 'Back'}
           </Button>
-          <Box>
-            <Button onClick={handleSaveDraft} disabled={submitLoading} sx={{ mr: 1 }}>
-              {submitLoading ? 'Saving...' : 'Save Draft'}
-            </Button>
-            {selectedType === 'BypassEmoc' ? (
-              <Button variant="contained" onClick={handleSubmit} disabled={submitLoading}>
-                {submitLoading ? 'Submitting...' : 'Submit'}
+          {selectedType !== 'Dmoc' && (
+            <Box>
+              <Button onClick={handleSaveDraft} disabled={submitLoading} sx={{ mr: 1 }}>
+                {submitLoading ? 'Saving...' : 'Save Draft'}
               </Button>
-            ) : activeStep === standardEmocSteps.length - 1 ? (
-              <Button variant="contained" onClick={handleSubmit} disabled={submitLoading}>
-                {submitLoading ? 'Submitting...' : 'Submit'}
-              </Button>
-            ) : (
-              <Button variant="contained" onClick={handleNext}>
-                Next
-              </Button>
-            )}
-          </Box>
+              {selectedType === 'BypassEmoc' ? (
+                <Button variant="contained" onClick={handleSubmit} disabled={submitLoading}>
+                  {submitLoading ? 'Submitting...' : 'Submit'}
+                </Button>
+              ) : (selectedType === 'StandardEmoc' || selectedType === 'Omoc') && activeStep === standardEmocSteps.length - 1 ? (
+                <Button variant="contained" onClick={handleSubmit} disabled={submitLoading}>
+                  {submitLoading ? 'Submitting...' : 'Submit'}
+                </Button>
+              ) : (selectedType === 'StandardEmoc' || selectedType === 'Omoc') ? (
+                <Button variant="contained" onClick={handleNext}>
+                  Next
+                </Button>
+              ) : null}
+            </Box>
+          )}
         </Box>
       </Paper>
 

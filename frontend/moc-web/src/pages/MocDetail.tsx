@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -32,6 +32,10 @@ import {
   Schedule as ScheduleIcon,
   History as HistoryIcon,
   Timeline as TimelineIcon,
+  Link as LinkIcon,
+  Upload as UploadIcon,
+  Delete as DeleteIcon,
+  OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import Stepper from '@mui/material/Stepper';
 import Step from '@mui/material/Step';
@@ -60,6 +64,10 @@ export default function MocDetail() {
   const [approverRemarks, setApproverRemarks] = useState('');
   const [activity, setActivity] = useState<ActivityLogEntry[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [documentLinkDialogOpen, setDocumentLinkDialogOpen] = useState(false);
+  const [documentLinkForm, setDocumentLinkForm] = useState({ documentGroup: 'General', documentType: 'Attachment', name: '', url: '' });
+  const [documentUploading, setDocumentUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchMoc = async () => {
     if (!id) return;
@@ -149,6 +157,60 @@ export default function MocDetail() {
       await fetchActivity();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to record approval.';
+      setActionError(msg);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleAddDocumentLink = async () => {
+    if (!id) return;
+    try {
+      setActionLoading(true);
+      setActionError(null);
+      await mocApi.addDocumentLink(id, {
+        documentGroup: documentLinkForm.documentGroup || 'General',
+        documentType: documentLinkForm.documentType || 'Attachment',
+        name: documentLinkForm.name || 'Link',
+        url: documentLinkForm.url || undefined,
+      });
+      setDocumentLinkDialogOpen(false);
+      setDocumentLinkForm({ documentGroup: 'General', documentType: 'Attachment', name: '', url: '' });
+      await fetchMoc();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to add link.';
+      setActionError(msg);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUploadDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!id || !file) return;
+    try {
+      setDocumentUploading(true);
+      setActionError(null);
+      await mocApi.uploadDocument(id, file, 'General', 'Attachment');
+      e.target.value = '';
+      await fetchMoc();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to upload file.';
+      setActionError(msg);
+    } finally {
+      setDocumentUploading(false);
+    }
+  };
+
+  const handleDeleteDocument = async (docId: string) => {
+    if (!id || !window.confirm('Remove this attachment?')) return;
+    try {
+      setActionLoading(true);
+      setActionError(null);
+      await mocApi.deleteDocument(id, docId);
+      await fetchMoc();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to delete.';
       setActionError(msg);
     } finally {
       setActionLoading(false);
@@ -546,13 +608,42 @@ export default function MocDetail() {
           </Grid>
         )}
 
-        {/* Documents */}
-        {moc.documents && moc.documents.length > 0 && (
-          <Grid size={{ xs: 12 }}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                Documents
-              </Typography>
+        {/* Documents / Attachments */}
+        <Grid size={{ xs: 12 }}>
+          <Paper sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+              <Typography variant="h6">Attachments</Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<LinkIcon />}
+                  onClick={() => setDocumentLinkDialogOpen(true)}
+                  disabled={actionLoading}
+                >
+                  Add link
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<UploadIcon />}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={documentUploading || actionLoading}
+                >
+                  {documentUploading ? 'Uploading...' : 'Upload file'}
+                </Button>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                  onChange={handleUploadDocument}
+                />
+              </Box>
+            </Box>
+            {(!moc.documents || moc.documents.length === 0) ? (
+              <Typography variant="body2" color="text.secondary">No attachments yet. Add a link or upload a file.</Typography>
+            ) : (
               <TableContainer>
                 <Table size="small">
                   <TableHead>
@@ -560,7 +651,8 @@ export default function MocDetail() {
                       <TableCell>Group</TableCell>
                       <TableCell>Type</TableCell>
                       <TableCell>Name</TableCell>
-                      <TableCell>Link</TableCell>
+                      <TableCell align="center">Open</TableCell>
+                      <TableCell align="right">Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -569,15 +661,26 @@ export default function MocDetail() {
                         <TableCell>{d.documentGroup}</TableCell>
                         <TableCell>{d.documentType}</TableCell>
                         <TableCell>{d.name}</TableCell>
-                        <TableCell>{d.isLink && d.url ? <a href={d.url} target="_blank" rel="noreferrer">Open</a> : '—'}</TableCell>
+                        <TableCell align="center">
+                          {d.isLink && d.url ? (
+                            <Button size="small" startIcon={<OpenInNewIcon />} href={d.url} target="_blank" rel="noreferrer">Open</Button>
+                          ) : (
+                            <Button size="small" startIcon={<OpenInNewIcon />} href={mocApi.getDocumentFileUrl(id!, d.id)} target="_blank" rel="noreferrer">Download</Button>
+                          )}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => handleDeleteDocument(d.id)} disabled={actionLoading}>
+                            Remove
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </TableContainer>
-            </Paper>
-          </Grid>
-        )}
+            )}
+          </Paper>
+        </Grid>
 
         {/* Activity / Audit log: who did what and when */}
         <Grid size={{ xs: 12 }}>
@@ -695,6 +798,52 @@ export default function MocDetail() {
           <Button onClick={() => { setCompleteApproverSlot(null); setApproverRemarks(''); }}>Cancel</Button>
           <Button onClick={handleCompleteApproverConfirm} variant="contained" color={completeApproverSlot?.approved ? 'success' : 'error'} disabled={actionLoading}>
             {actionLoading ? 'Saving...' : (completeApproverSlot?.approved ? 'Approve' : 'Reject')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add document link dialog */}
+      <Dialog open={documentLinkDialogOpen} onClose={() => setDocumentLinkDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Add link</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>Add a reference link (e.g. SharePoint, document URL).</DialogContentText>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Group"
+            fullWidth
+            value={documentLinkForm.documentGroup}
+            onChange={(e) => setDocumentLinkForm((f) => ({ ...f, documentGroup: e.target.value }))}
+          />
+          <TextField
+            margin="dense"
+            label="Type"
+            fullWidth
+            value={documentLinkForm.documentType}
+            onChange={(e) => setDocumentLinkForm((f) => ({ ...f, documentType: e.target.value }))}
+          />
+          <TextField
+            margin="dense"
+            label="Name"
+            fullWidth
+            required
+            value={documentLinkForm.name}
+            onChange={(e) => setDocumentLinkForm((f) => ({ ...f, name: e.target.value }))}
+          />
+          <TextField
+            margin="dense"
+            label="URL"
+            fullWidth
+            required
+            type="url"
+            value={documentLinkForm.url}
+            onChange={(e) => setDocumentLinkForm((f) => ({ ...f, url: e.target.value }))}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDocumentLinkDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleAddDocumentLink} variant="contained" disabled={actionLoading || !documentLinkForm.url?.trim()}>
+            {actionLoading ? 'Adding...' : 'Add link'}
           </Button>
         </DialogActions>
       </Dialog>

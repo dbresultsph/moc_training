@@ -16,6 +16,9 @@ dist/
 dist-ssr/
 *.local
 
+# Backend file uploads (MOC documents)
+**/uploads/
+
 # Logs
 logs/
 *.log

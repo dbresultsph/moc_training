@@ -17,10 +17,12 @@ namespace Moc.Api.Controllers;
 public class MocRequestsController : ControllerBase
 {
     private readonly MocDbContext _context;
+    private readonly IWebHostEnvironment _env;
 
-    public MocRequestsController(MocDbContext context)
+    public MocRequestsController(MocDbContext context, IWebHostEnvironment env)
     {
         _context = context;
+        _env = env;
     }
 
     #region List Endpoints
@@ -754,6 +756,137 @@ public class MocRequestsController : ControllerBase
 
     #endregion
 
+    #region Documents (Attachments)
+
+    /// <summary>
+    /// Adds a document to a MOC request (link only). For file uploads use POST with multipart/form-data.
+    /// </summary>
+    [HttpPost("{id}/documents")]
+    public async Task<ActionResult<MocRequestDetailDto>> AddDocument(Guid id, [FromBody] AddMocDocumentLinkDto dto)
+    {
+        var request = await _context.MocRequests.FindAsync(id);
+        if (request == null)
+            return NotFound();
+
+        var doc = new MocDocument
+        {
+            Id = Guid.NewGuid(),
+            MocRequestId = id,
+            DocumentGroup = dto.DocumentGroup ?? "General",
+            DocumentType = dto.DocumentType ?? "Attachment",
+            Name = dto.Name ?? "Link",
+            IsLink = true,
+            Url = dto.Url,
+            CreatedAtUtc = DateTime.UtcNow,
+            CreatedBy = "system"
+        };
+        _context.MocDocuments.Add(doc);
+        await _context.SaveChangesAsync();
+        return await GetById(id);
+    }
+
+    /// <summary>
+    /// Uploads a file as an attachment to a MOC request. Accepts multipart/form-data with file and optional documentGroup, documentType.
+    /// </summary>
+    [HttpPost("{id}/documents/upload")]
+    [RequestSizeLimit(10 * 1024 * 1024)] // 10 MB
+    [RequestFormLimits(MultipartBodyLengthLimit = 10 * 1024 * 1024)]
+    public async Task<ActionResult<MocRequestDetailDto>> UploadDocument(Guid id, IFormFile file, [FromForm] string? documentGroup = null, [FromForm] string? documentType = null)
+    {
+        var request = await _context.MocRequests.FindAsync(id);
+        if (request == null)
+            return NotFound();
+        if (file == null || file.Length == 0)
+            return BadRequest(new { message = "No file provided." });
+
+        var safeName = Path.GetFileName(file.FileName) ?? "upload";
+        if (safeName.Length > 200)
+            safeName = safeName[^200..];
+        var ext = Path.GetExtension(safeName);
+        var storageDir = Path.Combine(_env.ContentRootPath, "uploads", "moc-documents");
+        Directory.CreateDirectory(storageDir);
+        var uniqueName = $"{id:N}_{Guid.NewGuid():N}{ext}";
+        var storagePath = Path.Combine(storageDir, uniqueName);
+
+        await using (var stream = new FileStream(storagePath, FileMode.Create))
+            await file.CopyToAsync(stream);
+
+        var doc = new MocDocument
+        {
+            Id = Guid.NewGuid(),
+            MocRequestId = id,
+            DocumentGroup = documentGroup ?? "General",
+            DocumentType = documentType ?? "Attachment",
+            Name = safeName,
+            IsLink = false,
+            StoragePath = uniqueName,
+            CreatedAtUtc = DateTime.UtcNow,
+            CreatedBy = "system"
+        };
+        _context.MocDocuments.Add(doc);
+        await _context.SaveChangesAsync();
+        return await GetById(id);
+    }
+
+    /// <summary>
+    /// Deletes a document from a MOC request. Removes file from disk if it was an upload.
+    /// </summary>
+    [HttpDelete("{id}/documents/{docId}")]
+    public async Task<ActionResult<MocRequestDetailDto>> DeleteDocument(Guid id, Guid docId)
+    {
+        var request = await _context.MocRequests.FindAsync(id);
+        if (request == null)
+            return NotFound();
+
+        var doc = await _context.MocDocuments.FirstOrDefaultAsync(d => d.Id == docId && d.MocRequestId == id);
+        if (doc == null)
+            return NotFound();
+
+        if (!doc.IsLink && !string.IsNullOrEmpty(doc.StoragePath))
+        {
+            var fullPath = Path.Combine(_env.ContentRootPath, "uploads", "moc-documents", doc.StoragePath);
+            if (System.IO.File.Exists(fullPath))
+                try { System.IO.File.Delete(fullPath); } catch { /* best effort */ }
+        }
+
+        _context.MocDocuments.Remove(doc);
+        await _context.SaveChangesAsync();
+        return await GetById(id);
+    }
+
+    /// <summary>
+    /// Downloads an attached file. For link documents returns 302 redirect to URL.
+    /// </summary>
+    [HttpGet("{id}/documents/{docId}/file")]
+    public async Task<IActionResult> GetDocumentFile(Guid id, Guid docId)
+    {
+        var doc = await _context.MocDocuments.FirstOrDefaultAsync(d => d.Id == docId && d.MocRequestId == id);
+        if (doc == null)
+            return NotFound();
+
+        if (doc.IsLink && !string.IsNullOrEmpty(doc.Url))
+            return Redirect(doc.Url);
+
+        if (doc.IsLink || string.IsNullOrEmpty(doc.StoragePath))
+            return NotFound();
+
+        var fullPath = Path.Combine(_env.ContentRootPath, "uploads", "moc-documents", doc.StoragePath);
+        if (!System.IO.File.Exists(fullPath))
+            return NotFound();
+
+        var contentType = "application/octet-stream";
+        var ext = Path.GetExtension(doc.Name).ToLowerInvariant();
+        if (ext == ".pdf") contentType = "application/pdf";
+        else if (ext == ".doc" || ext == ".docx") contentType = "application/msword";
+        else if (ext == ".xls" || ext == ".xlsx") contentType = "application/vnd.ms-excel";
+        else if (ext == ".jpg" || ext == ".jpeg") contentType = "image/jpeg";
+        else if (ext == ".png") contentType = "image/png";
+
+        return PhysicalFile(fullPath, contentType, doc.Name);
+    }
+
+    #endregion
+
     #region Export
 
     /// <summary>
@@ -1242,6 +1375,17 @@ public record MocDocumentDto
     public string DocumentType { get; init; } = string.Empty;
     public string Name { get; init; } = string.Empty;
     public bool IsLink { get; init; }
+    public string? Url { get; init; }
+}
+
+/// <summary>
+/// DTO for adding a document link to a MOC.
+/// </summary>
+public record AddMocDocumentLinkDto
+{
+    public string? DocumentGroup { get; init; }
+    public string? DocumentType { get; init; }
+    public string? Name { get; init; }
     public string? Url { get; init; }
 }
 
