@@ -1,9 +1,0 @@
-# Railway deployment configuration for MocSolution API
-# See: https://docs.railway.app/deploy/config-as-code
-
-[build]
-builder = "nixpacks"
-
-[deploy]
-# Build and run the Moc.Api project from the backend/src directory
-startCommand = "dotnet run --project backend/src/Moc.Api"

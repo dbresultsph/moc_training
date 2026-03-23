@@ -80,6 +80,4 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Use PORT from Railway/cloud hosts, or default for local development
-var port = Environment.GetEnvironmentVariable("PORT") ?? "5221";
-app.Run($"http://0.0.0.0:{port}");
+app.Run();
