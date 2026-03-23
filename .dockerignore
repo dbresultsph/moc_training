@@ -1,0 +1,23 @@
+# Exclude files not needed for API build (speeds up Docker build)
+.git
+.gitignore
+*.md
+frontend/
+.github/
+
+# Build outputs
+**/bin/
+**/obj/
+**/out/
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+.DS_Store
+
+# Node (frontend only)
+node_modules/
+**/dist/
