@@ -1,12 +1,24 @@
 import axios from 'axios';
 
 /**
+ * Resolves the ASP.NET Core API base URL (includes /api segment).
+ * VITE_API_BASE_URL is the backend origin only; /api is appended for controller routes.
+ */
+function resolveAxiosBaseUrl(): string {
+  const root = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(
+    /\/$/,
+    ''
+  );
+  return `${root}/api`;
+}
+
+/**
  * Axios client configured for the MOC API.
  * Base URL points to the ASP.NET Core backend.
  * Interceptors handle auth headers and error responses consistently.
  */
 const axiosClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5221/api',
+  baseURL: resolveAxiosBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
   },

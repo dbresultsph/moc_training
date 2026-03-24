@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Moc.Api.Middleware;
 using Moc.Application.Dmoc;
@@ -11,14 +12,27 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// CORS: allow React frontend (Vite dev server) to call the API
+// Forwarded headers: trust Railway / reverse proxy X-Forwarded-For and X-Forwarded-Proto
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// CORS: origins from Cors:AllowedOrigins only (configure in appsettings or env, e.g. Cors__AllowedOrigins__0)
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://localhost:5174")
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        policy.AllowAnyHeader().AllowAnyMethod();
+        if (allowedOrigins.Length > 0)
+            policy.WithOrigins(allowedOrigins);
+        else
+            // No Cors:AllowedOrigins configured: allow any origin so the host still starts (set origins in production).
+            policy.AllowAnyOrigin();
     });
 });
 
@@ -48,6 +62,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Forwarded headers must run before HTTPS redirection so redirects use the correct public scheme
+app.UseForwardedHeaders();
 
 // Add global error handling middleware (must be early in pipeline)
 app.UseMiddleware<ErrorHandlingMiddleware>();
