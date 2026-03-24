@@ -20,19 +20,16 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
-// CORS: origins from Cors:AllowedOrigins only (configure in appsettings or env, e.g. Cors__AllowedOrigins__0)
+// CORS: origins from Cors:AllowedOrigins (appsettings or env, e.g. Cors__AllowedOrigins__0)
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.AllowAnyHeader().AllowAnyMethod();
-        if (allowedOrigins.Length > 0)
-            policy.WithOrigins(allowedOrigins);
-        else
-            // No Cors:AllowedOrigins configured: allow any origin so the host still starts (set origins in production).
-            policy.AllowAnyOrigin();
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod();
     });
 });
 
